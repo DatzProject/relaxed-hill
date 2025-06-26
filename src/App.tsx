@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const endpoint =
   "https://script.google.com/macros/s/AKfycbwjQ5l9ovx35Gef01HqGNZE_XEPyw3FSF6cYII7yW-_1Ps2k0hVY9wUpFgUI0aKqams/exec";
@@ -641,7 +643,6 @@ const MonthlyRecapTab: React.FC<{
   const statusSummary = getStatusSummary();
 
   const downloadExcel = () => {
-    // Membuat data untuk worksheet
     const headers = [
       "Nama",
       "Kelas",
@@ -664,11 +665,8 @@ const MonthlyRecapTab: React.FC<{
       ]),
     ];
 
-    // Membuat worksheet
     const ws = XLSX.utils.aoa_to_sheet(data);
-
-    // Menambahkan styling sederhana (opsional)
-    ws["!cols"] = headers.map(() => ({ wch: 15 })); // Lebar kolom default 15 karakter
+    ws["!cols"] = headers.map(() => ({ wch: 15 }));
     const headerStyle = {
       font: { bold: true },
       fill: { fgColor: { rgb: "FFFF00" } },
@@ -680,11 +678,9 @@ const MonthlyRecapTab: React.FC<{
       ws[cellAddress].s = headerStyle;
     });
 
-    // Membuat workbook dan menambahkan worksheet
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
 
-    // Menghasilkan file dan memicu unduhan
     const date = new Date()
       .toLocaleString("id-ID", {
         day: "2-digit",
@@ -698,6 +694,78 @@ const MonthlyRecapTab: React.FC<{
       .replace(/:/g, "-");
     const fileName = `Rekap_Bulanan_${selectedBulan}_${selectedKelas}_${date}.xlsx`;
     XLSX.writeFile(wb, fileName);
+  };
+
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+    const headers = [
+      "Nama",
+      "Kelas",
+      "Hadir",
+      "Alpha",
+      "Izin",
+      "Sakit",
+      "% Hadir",
+    ];
+    const data = filteredRecapData.map((item) => [
+      item.nama || "N/A",
+      item.kelas || "N/A",
+      item.hadir || 0,
+      item.alpa || 0,
+      item.izin || 0,
+      item.sakit || 0,
+      item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
+    ]);
+
+    doc.text("Rekap Bulanan", doc.internal.pageSize.getWidth() / 2, 15, {
+      align: "center",
+    });
+    doc.setFontSize(12);
+    doc.text(
+      `Bulan: ${selectedBulan} | Kelas: ${selectedKelas}`,
+      doc.internal.pageSize.getWidth() / 2,
+      25,
+      { align: "center" }
+    );
+
+    autoTable(doc, {
+      head: [headers],
+      body: data,
+      startY: 35,
+      theme: "grid", // Menambahkan garis untuk tabel yang rapi
+      headStyles: {
+        fillColor: [255, 255, 0],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+      }, // Header kuning seperti Excel
+      styles: { cellPadding: 2, fontSize: 10, halign: "center" }, // Rapi dan terpusat
+      columnStyles: {
+        0: { cellWidth: 50 }, // Nama diperlebar
+        1: { cellWidth: 20 }, // Kelas
+        2: { cellWidth: 15 }, // Hadir
+        3: { cellWidth: 15 }, // Alpha
+        4: { cellWidth: 15 }, // Izin
+        5: { cellWidth: 15 }, // Sakit
+        6: { cellWidth: 20 }, // % Hadir
+      },
+      margin: { left: 30, right: 15 }, // Margin kiri dan kanan untuk memusatkan
+      tableWidth: "auto", // Lebar tabel disesuaikan otomatis
+      horizontalPageBreak: true, // Memungkinkan pemisahan halaman jika tabel panjang
+    });
+
+    const date = new Date()
+      .toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(/ /g, "_")
+      .replace(/:/g, "-");
+    const fileName = `Rekap_Bulanan_${selectedBulan}_${selectedKelas}_${date}.pdf`;
+    doc.save(fileName);
   };
 
   return (
@@ -817,9 +885,15 @@ const MonthlyRecapTab: React.FC<{
             <div className="text-center mt-6">
               <button
                 onClick={downloadExcel}
-                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium mr-2"
               >
                 📥 Unduh Rekap sebagai Excel
+              </button>
+              <button
+                onClick={downloadPDF}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+              >
+                📥 Unduh Rekap sebagai PDF
               </button>
             </div>
           </>
