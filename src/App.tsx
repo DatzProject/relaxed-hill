@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 const endpoint =
   "https://script.google.com/macros/s/AKfycbwjQ5l9ovx35Gef01HqGNZE_XEPyw3FSF6cYII7yW-_1Ps2k0hVY9wUpFgUI0aKqams/exec";
@@ -639,6 +640,66 @@ const MonthlyRecapTab: React.FC<{
 
   const statusSummary = getStatusSummary();
 
+  const downloadExcel = () => {
+    // Membuat data untuk worksheet
+    const headers = [
+      "Nama",
+      "Kelas",
+      "Hadir",
+      "Alpha",
+      "Izin",
+      "Sakit",
+      "% Hadir",
+    ];
+    const data = [
+      headers,
+      ...filteredRecapData.map((item) => [
+        item.nama || "N/A",
+        item.kelas || "N/A",
+        item.hadir || 0,
+        item.alpa || 0,
+        item.izin || 0,
+        item.sakit || 0,
+        item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
+      ]),
+    ];
+
+    // Membuat worksheet
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Menambahkan styling sederhana (opsional)
+    ws["!cols"] = headers.map(() => ({ wch: 15 })); // Lebar kolom default 15 karakter
+    const headerStyle = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "FFFF00" } },
+      alignment: { horizontal: "center" },
+    };
+    headers.forEach((header, index) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: index });
+      if (!ws[cellAddress]) ws[cellAddress] = {};
+      ws[cellAddress].s = headerStyle;
+    });
+
+    // Membuat workbook dan menambahkan worksheet
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
+
+    // Menghasilkan file dan memicu unduhan
+    const date = new Date()
+      .toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+      .replace(/ /g, "_")
+      .replace(/:/g, "-");
+    const fileName = `Rekap_Bulanan_${selectedBulan}_${selectedKelas}_${date}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -751,6 +812,15 @@ const MonthlyRecapTab: React.FC<{
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="text-center mt-6">
+              <button
+                onClick={downloadExcel}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+              >
+                📥 Unduh Rekap sebagai Excel
+              </button>
             </div>
           </>
         )}
