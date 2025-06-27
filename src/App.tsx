@@ -1242,7 +1242,7 @@ const GraphTab: React.FC<{
   const chartOptions = {
     responsive: true,
     plugins: {
-      legend: { position: "top" },
+      legend: { position: "top" as const }, // Gunakan 'as const' untuk tipe literal
       title: {
         display: true,
         text: `Persentase Kehadiran Kelas ${selectedKelas} 2025`,
@@ -1255,7 +1255,7 @@ const GraphTab: React.FC<{
         title: { display: true, text: "Persentase (%)" },
       },
     },
-  };
+  } as const; // Opsional, tambahkan ini untuk seluruh objek jika diperlukan
 
   return (
     <div className="max-w-4xl mx-auto">
