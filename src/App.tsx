@@ -2,9 +2,28 @@ import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const endpoint =
-  "https://script.google.com/macros/s/AKfycbwjQ5l9ovx35Gef01HqGNZE_XEPyw3FSF6cYII7yW-_1Ps2k0hVY9wUpFgUI0aKqams/exec";
+  "https://script.google.com/macros/s/AKfycbz0rICuH8L-9VI3ysBIwtZA6BzxiHck_txmqwTApuNk19hHpnY40vMAi2J7aXq7sFjj/exec";
 
 interface Student {
   id: string;
@@ -28,6 +47,15 @@ interface MonthlyRecap {
   izin: number;
   sakit: number;
   persenHadir: number;
+}
+
+interface GraphData {
+  [month: string]: {
+    Hadir: number;
+    Alpha: number;
+    Izin: number;
+    Sakit: number;
+  };
 }
 
 const formatDateDDMMYYYY = (isoDate: string): string => {
@@ -210,17 +238,17 @@ const AttendanceTab: React.FC<{
   const [showDebugInfo, setShowDebugInfo] = useState<boolean>(false);
 
   const uniqueClasses = React.useMemo(() => {
-    console.log("Processing students for classes:", students);
+    console.log("Memproses siswa untuk kelas:", students);
 
     const classSet = new Set<string>();
 
     students.forEach((student) => {
       console.log(
-        "Student:",
+        "Siswa:",
         student.name,
-        "Class:",
+        "Kelas:",
         student.kelas,
-        "Type:",
+        "Tipe:",
         typeof student.kelas
       );
 
@@ -254,7 +282,7 @@ const AttendanceTab: React.FC<{
       }
     });
 
-    console.log("Unique classes found:", classes);
+    console.log("Kelas unik yang ditemukan:", classes);
     return ["Semua", ...classes];
   }, [students]);
 
@@ -268,7 +296,7 @@ const AttendanceTab: React.FC<{
       const studentKelas = String(student.kelas).trim();
       const result = studentKelas === selectedKelas;
       console.log(
-        `Filtering: ${student.name} (${studentKelas}) === ${selectedKelas} = ${result}`
+        `Menyaring: ${student.name} (${studentKelas}) === ${selectedKelas} = ${result}`
       );
       return result;
     });
@@ -314,6 +342,7 @@ const AttendanceTab: React.FC<{
             ? "✅ Data absensi semua kelas berhasil dikirim!"
             : `✅ Data absensi kelas ${selectedKelas} berhasil dikirim!`;
         alert(message);
+        onRecapRefresh();
       })
       .catch(() => alert("❌ Gagal kirim data absensi."));
   };
@@ -359,7 +388,7 @@ const AttendanceTab: React.FC<{
             <select
               value={selectedKelas}
               onChange={(e) => {
-                console.log("Changing class filter to:", e.target.value);
+                console.log("Mengubah filter kelas ke:", e.target.value);
                 setSelectedKelas(e.target.value);
               }}
               className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
@@ -377,7 +406,7 @@ const AttendanceTab: React.FC<{
               onClick={() => setShowDebugInfo(!showDebugInfo)}
               className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded-lg"
             >
-              🔍 Debug Info
+              🔍 Info Debug
             </button>
           </div>
         </div>
@@ -385,7 +414,7 @@ const AttendanceTab: React.FC<{
         {showDebugInfo && (
           <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <h4 className="font-semibold text-yellow-800 mb-2">
-              Debug Information:
+              Informasi Debug:
             </h4>
             <div className="text-sm text-yellow-700 space-y-1">
               <p>
@@ -430,7 +459,7 @@ const AttendanceTab: React.FC<{
             </div>
             <div className="mt-3">
               <p className="font-semibold text-yellow-800 mb-1">
-                Raw Student Data Sample:
+                Sampel Data Siswa Mentah:
               </p>
               <div className="max-h-24 overflow-y-auto text-xs bg-white p-2 rounded border">
                 {students.slice(0, 5).map((s, idx) => (
@@ -584,9 +613,9 @@ const MonthlyRecapTab: React.FC<{
   useEffect(() => {
     setLoading(true);
     console.log(
-      "Fetching recap data with kelas:",
+      "Mengambil data rekap dengan kelas:",
       selectedKelas,
-      "and bulan:",
+      "dan bulan:",
       selectedBulan
     );
     fetch(
@@ -599,7 +628,7 @@ const MonthlyRecapTab: React.FC<{
         return res.json();
       })
       .then((data) => {
-        console.log("Recap data response:", data);
+        console.log("Respons data rekap:", data);
         if (data.success) {
           setRecapData(data.data || []);
         } else {
@@ -609,7 +638,7 @@ const MonthlyRecapTab: React.FC<{
         setLoading(false);
       })
       .catch((error) => {
-        console.error("Fetch error:", error);
+        console.error("Error fetch:", error);
         alert("❌ Gagal memuat data rekap. Cek console untuk detail.");
         setRecapData([]);
         setLoading(false);
@@ -620,11 +649,11 @@ const MonthlyRecapTab: React.FC<{
     if (selectedKelas === "Semua") {
       return recapData;
     }
-    console.log("Filtering recap data for kelas:", selectedKelas);
+    console.log("Menyaring data rekap untuk kelas:", selectedKelas);
     return recapData.filter((item) => {
       const itemKelas = String(item.kelas).trim();
       const result = itemKelas === selectedKelas;
-      console.log("Item kelas:", itemKelas, "match?", result);
+      console.log("Kelas item:", itemKelas, "cocok?", result);
       return result;
     });
   }, [recapData, selectedKelas]);
@@ -663,6 +692,52 @@ const MonthlyRecapTab: React.FC<{
         item.sakit || 0,
         item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
       ]),
+      [
+        "TOTAL",
+        "",
+        statusSummary.Hadir,
+        statusSummary.Alpha,
+        statusSummary.Izin,
+        statusSummary.Sakit,
+        "",
+      ],
+      [
+        "PERSEN",
+        "",
+        `${(
+          (statusSummary.Hadir /
+            (statusSummary.Hadir +
+              statusSummary.Alpha +
+              statusSummary.Izin +
+              statusSummary.Sakit)) *
+          100
+        ).toFixed(2)}%`,
+        `${(
+          (statusSummary.Alpha /
+            (statusSummary.Hadir +
+              statusSummary.Alpha +
+              statusSummary.Izin +
+              statusSummary.Sakit)) *
+          100
+        ).toFixed(2)}%`,
+        `${(
+          (statusSummary.Izin /
+            (statusSummary.Hadir +
+              statusSummary.Alpha +
+              statusSummary.Izin +
+              statusSummary.Sakit)) *
+          100
+        ).toFixed(2)}%`,
+        `${(
+          (statusSummary.Sakit /
+            (statusSummary.Hadir +
+              statusSummary.Alpha +
+              statusSummary.Izin +
+              statusSummary.Sakit)) *
+          100
+        ).toFixed(2)}%`,
+        "",
+      ],
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -672,10 +747,32 @@ const MonthlyRecapTab: React.FC<{
       fill: { fgColor: { rgb: "FFFF00" } },
       alignment: { horizontal: "center" },
     };
+    const totalStyle = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "D3D3D3" } },
+      alignment: { horizontal: "center" },
+    };
+    const percentStyle = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "D3D3D3" } },
+      alignment: { horizontal: "center" },
+    };
     headers.forEach((header, index) => {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: index });
       if (!ws[cellAddress]) ws[cellAddress] = {};
       ws[cellAddress].s = headerStyle;
+    });
+    const totalRow = filteredRecapData.length + 1;
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+      const cellAddress = `${col}${totalRow}`;
+      if (!ws[cellAddress]) ws[cellAddress] = {};
+      ws[cellAddress].s = totalStyle;
+    });
+    const percentRow = filteredRecapData.length + 2;
+    ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
+      const cellAddress = `${col}${percentRow}`;
+      if (!ws[cellAddress]) ws[cellAddress] = {};
+      ws[cellAddress].s = percentStyle;
     });
 
     const wb = XLSX.utils.book_new();
@@ -707,51 +804,131 @@ const MonthlyRecapTab: React.FC<{
       "Sakit",
       "% Hadir",
     ];
-    const data = filteredRecapData.map((item) => [
-      item.nama || "N/A",
-      item.kelas || "N/A",
-      item.hadir || 0,
-      item.alpa || 0,
-      item.izin || 0,
-      item.sakit || 0,
-      item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
-    ]);
+    const totalAttendance =
+      statusSummary.Hadir +
+      statusSummary.Alpha +
+      statusSummary.Izin +
+      statusSummary.Sakit;
+    const data = [
+      ...filteredRecapData.map((item) => [
+        item.nama || "T/A",
+        item.kelas || "T/A",
+        item.hadir || 0,
+        item.alpa || 0,
+        item.izin || 0,
+        item.sakit || 0,
+        item.persenHadir !== undefined ? `${item.persenHadir}%` : "T/A",
+      ]),
+      // Baris Total
+      [
+        "TOTAL",
+        "",
+        statusSummary.Hadir,
+        statusSummary.Alpha,
+        statusSummary.Izin,
+        statusSummary.Sakit,
+        "",
+      ],
+      // Baris Persentase
+      [
+        "PERSEN",
+        "",
+        totalAttendance > 0
+          ? `${((statusSummary.Hadir / totalAttendance) * 100).toFixed(1)}%`
+          : "0%",
+        totalAttendance > 0
+          ? `${((statusSummary.Alpha / totalAttendance) * 100).toFixed(1)}%`
+          : "0%",
+        totalAttendance > 0
+          ? `${((statusSummary.Izin / totalAttendance) * 100).toFixed(1)}%`
+          : "0%",
+        totalAttendance > 0
+          ? `${((statusSummary.Sakit / totalAttendance) * 100).toFixed(1)}%`
+          : "0%",
+        "",
+      ],
+    ];
 
-    doc.text("Rekap Bulanan", doc.internal.pageSize.getWidth() / 2, 15, {
-      align: "center",
-    });
-    doc.setFontSize(12);
+    // Tambahkan judul
     doc.text(
-      `Bulan: ${selectedBulan} | Kelas: ${selectedKelas}`,
+      `REKAP ABSENSI SISWA KELAS ${selectedKelas} ${selectedBulan.toUpperCase()} 2025`,
       doc.internal.pageSize.getWidth() / 2,
-      25,
+      15,
       { align: "center" }
     );
+    doc.setFontSize(12);
 
+    // Buat tabel tunggal dengan semua data
     autoTable(doc, {
       head: [headers],
       body: data,
-      startY: 35,
-      theme: "grid", // Menambahkan garis untuk tabel yang rapi
+      startY: 25,
+      theme: "grid",
       headStyles: {
-        fillColor: [255, 255, 0],
+        fillColor: [255, 255, 0], // Kuning untuk header
         textColor: [0, 0, 0],
         fontStyle: "bold",
-      }, // Header kuning seperti Excel
-      styles: { cellPadding: 2, fontSize: 10, halign: "center" }, // Rapi dan terpusat
-      columnStyles: {
-        0: { cellWidth: 50 }, // Nama diperlebar
-        1: { cellWidth: 20 }, // Kelas
-        2: { cellWidth: 15 }, // Hadir
-        3: { cellWidth: 15 }, // Alpha
-        4: { cellWidth: 15 }, // Izin
-        5: { cellWidth: 15 }, // Sakit
-        6: { cellWidth: 20 }, // % Hadir
+        lineColor: [0, 0, 0], // Garis batas hitam untuk header
+        lineWidth: 0.1, // Ketebalan garis batas
       },
-      margin: { left: 30, right: 15 }, // Margin kiri dan kanan untuk memusatkan
-      tableWidth: "auto", // Lebar tabel disesuaikan otomatis
-      horizontalPageBreak: true, // Memungkinkan pemisahan halaman jika tabel panjang
+      styles: {
+        cellPadding: 2,
+        fontSize: 10,
+        halign: "center",
+        lineColor: [0, 0, 0], // Garis batas hitam untuk seluruh tabel
+        lineWidth: 0.1, // Ketebalan garis batas
+      },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 15 },
+        3: { cellWidth: 15 },
+        4: { cellWidth: 15 },
+        5: { cellWidth: 15 },
+        6: { cellWidth: 20 },
+      },
+      margin: { left: 30, right: 15 },
+      tableWidth: "auto",
+      horizontalPageBreak: true,
+      // Gaya untuk baris total dan persentase
+      didParseCell: (data) => {
+        if (data.row.index === filteredRecapData.length) {
+          // Baris Total
+          data.cell.styles.fillColor = [240, 240, 240]; // Abu-abu muda
+          data.cell.styles.fontStyle = "bold";
+        } else if (data.row.index === filteredRecapData.length + 1) {
+          // Baris Persentase
+          data.cell.styles.fillColor = [240, 240, 240]; // Abu-abu muda
+          data.cell.styles.fontStyle = "bold";
+        }
+      },
     });
+
+    // Tambahkan tanda tangan
+    const finalY = (doc as any).lastAutoTable.finalY || 25;
+    doc.text("Mengetahui,", 15, finalY + 20);
+    doc.text("Kepala Sekolah", 15, finalY + 30);
+    doc.text("NIP: 1975091220001014", 15, finalY + 40);
+    doc.text(
+      `Makassar, ${new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })}`,
+      doc.internal.pageSize.getWidth() - 50,
+      finalY + 20
+    );
+    doc.text("Guru Kelas", doc.internal.pageSize.getWidth() - 50, finalY + 30);
+    doc.text(
+      "Herlita, S.Pd",
+      doc.internal.pageSize.getWidth() - 50,
+      finalY + 40
+    );
+    doc.text(
+      "NIP: 1990081020202212",
+      doc.internal.pageSize.getWidth() - 50,
+      finalY + 50
+    );
 
     const date = new Date()
       .toLocaleString("id-ID", {
@@ -903,22 +1080,232 @@ const MonthlyRecapTab: React.FC<{
   );
 };
 
-const StudentAttendanceApp: React.FC = () => {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [uniqueClasses, setUniqueClasses] = useState<string[]>(["Semua"]);
-  const [activeTab, setActiveTab] = useState<"data" | "attendance" | "recap">(
-    "data"
-  );
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+const GraphTab: React.FC<{
+  uniqueClasses: string[];
+}> = ({ uniqueClasses }) => {
+  const [graphData, setGraphData] = useState<GraphData>({
+    Januari: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Februari: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Maret: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    April: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Mei: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Juni: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Juli: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Agustus: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    September: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Oktober: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    November: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+    Desember: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+  });
+  const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchStudents = () => {
-    fetch(endpoint)
+  useEffect(() => {
+    setLoading(true);
+    fetch(
+      `${endpoint}?action=graphData&kelas=${
+        selectedKelas === "Semua" ? "" : selectedKelas
+      }`
+    )
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
+      .then((data) => {
+        if (data.success) {
+          setGraphData(data.data || {});
+        } else {
+          alert("❌ Gagal memuat data grafik: " + data.message);
+          setGraphData({
+            Januari: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Februari: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Maret: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            April: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Mei: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Juni: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Juli: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Agustus: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            September: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Oktober: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            November: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+            Desember: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
+          });
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetch:", error);
+        alert("❌ Gagal memuat data grafik. Cek console untuk detail.");
+        setLoading(false);
+      });
+  }, [selectedKelas]);
+
+  const chartData = {
+    labels: [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ],
+    datasets: [
+      {
+        label: "Hadir",
+        data: [
+          graphData.Januari.Hadir,
+          graphData.Februari.Hadir,
+          graphData.Maret.Hadir,
+          graphData.April.Hadir,
+          graphData.Mei.Hadir,
+          graphData.Juni.Hadir,
+          graphData.Juli.Hadir,
+          graphData.Agustus.Hadir,
+          graphData.September.Hadir,
+          graphData.Oktober.Hadir,
+          graphData.November.Hadir,
+          graphData.Desember.Hadir,
+        ],
+        backgroundColor: "rgba(75, 192, 192, 0.6)",
+        borderColor: "rgba(75, 192, 192, 1)",
+        borderWidth: 1,
+      },
+      {
+        label: "Alpha",
+        data: [
+          graphData.Januari.Alpha,
+          graphData.Februari.Alpha,
+          graphData.Maret.Alpha,
+          graphData.April.Alpha,
+          graphData.Mei.Alpha,
+          graphData.Juni.Alpha,
+          graphData.Juli.Alpha,
+          graphData.Agustus.Alpha,
+          graphData.September.Alpha,
+          graphData.Oktober.Alpha,
+          graphData.November.Alpha,
+          graphData.Desember.Alpha,
+        ],
+        backgroundColor: "rgba(255, 99, 132, 0.6)",
+        borderColor: "rgba(255, 99, 132, 1)",
+        borderWidth: 1,
+      },
+      {
+        label: "Izin",
+        data: [
+          graphData.Januari.Izin,
+          graphData.Februari.Izin,
+          graphData.Maret.Izin,
+          graphData.April.Izin,
+          graphData.Mei.Izin,
+          graphData.Juni.Izin,
+          graphData.Juli.Izin,
+          graphData.Agustus.Izin,
+          graphData.September.Izin,
+          graphData.Oktober.Izin,
+          graphData.November.Izin,
+          graphData.Desember.Izin,
+        ],
+        backgroundColor: "rgba(255, 205, 86, 0.6)",
+        borderColor: "rgba(255, 205, 86, 1)",
+        borderWidth: 1,
+      },
+      {
+        label: "Sakit",
+        data: [
+          graphData.Januari.Sakit,
+          graphData.Februari.Sakit,
+          graphData.Maret.Sakit,
+          graphData.April.Sakit,
+          graphData.Mei.Sakit,
+          graphData.Juni.Sakit,
+          graphData.Juli.Sakit,
+          graphData.Agustus.Sakit,
+          graphData.September.Sakit,
+          graphData.Oktober.Sakit,
+          graphData.November.Sakit,
+          graphData.Desember.Sakit,
+        ],
+        backgroundColor: "rgba(54, 162, 235, 0.6)",
+        borderColor: "rgba(54, 162, 235, 1)",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { position: "top" },
+      title: {
+        display: true,
+        text: `Persentase Kehadiran Kelas ${selectedKelas} 2025`,
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        title: { display: true, text: "Persentase (%)" },
+      },
+    },
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
+          📈 Grafik Kehadiran
+        </h2>
+
+        <div className="mb-6 text-center">
+          <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
+          <select
+            value={selectedKelas}
+            onChange={(e) => setSelectedKelas(e.target.value)}
+            className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
+          >
+            {uniqueClasses.map((kelas) => (
+              <option key={kelas} value={kelas}>
+                {kelas}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">Memuat grafik...</p>
+          </div>
+        ) : (
+          <div className="h-96">
+            <Bar data={chartData} options={chartOptions} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StudentAttendanceApp: React.FC = () => {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [uniqueClasses, setUniqueClasses] = useState<string[]>(["Semua"]);
+  const [activeTab, setActiveTab] = useState<
+    "data" | "attendance" | "recap" | "graph"
+  >("data");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const fetchStudents = () => {
+    fetch(endpoint)
+      .then((res) => res.json())
       .then((data: Student[]) => {
-        console.log("Fetched student data:", data);
+        console.log("Data siswa yang diambil:", data);
         setStudents(data);
 
         const classSet = new Set<string>();
@@ -945,7 +1332,7 @@ const StudentAttendanceApp: React.FC = () => {
         setUniqueClasses(["Semua", ...classes]);
       })
       .catch((error) => {
-        console.error("Fetch error:", error);
+        console.error("Error fetch:", error);
         alert("❌ Gagal mengambil data siswa. Cek console untuk detail.");
       });
   };
@@ -1000,6 +1387,16 @@ const StudentAttendanceApp: React.FC = () => {
             >
               📊 Rekap Bulanan
             </button>
+            <button
+              onClick={() => setActiveTab("graph")}
+              className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
+                activeTab === "graph"
+                  ? "bg-blue-600 text-white border-b-2 border-blue-600"
+                  : "text-gray-600 hover:text-blue-600 hover:bg-gray-50"
+              }`}
+            >
+              📈 Grafik
+            </button>
           </div>
         </div>
 
@@ -1011,11 +1408,13 @@ const StudentAttendanceApp: React.FC = () => {
               students={students}
               onRecapRefresh={handleRecapRefresh}
             />
-          ) : (
+          ) : activeTab === "recap" ? (
             <MonthlyRecapTab
               onRefresh={handleRecapRefresh}
               uniqueClasses={uniqueClasses}
             />
+          ) : (
+            <GraphTab uniqueClasses={uniqueClasses} />
           )}
         </div>
       </div>
