@@ -28,7 +28,7 @@ ChartJS.register(
 );
 
 const endpoint =
-  "https://script.google.com/macros/s/AKfycbz0rICuH8L-9VI3ysBIwtZA6BzxiHck_txmqwTApuNk19hHpnY40vMAi2J7aXq7sFjj/exec";
+  "https://script.google.com/macros/s/AKfycbycBPC5v37tvEHjzFnwHzyaY5jKQisMgG6SRQE_RJfei-4VWfaigY8bU0YRHr-w9t7e/exec";
 
 interface Student {
   id: string;
