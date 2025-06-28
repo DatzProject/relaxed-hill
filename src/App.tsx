@@ -10,6 +10,11 @@ import {
   Title,
   Tooltip,
   Legend,
+  ChartData,
+  ChartOptions,
+  ChartEvent,
+  LegendItem,
+  ActiveElement,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
 
@@ -33,9 +38,10 @@ interface Student {
 }
 
 type AttendanceStatus = "Hadir" | "Izin" | "Sakit" | "Alpha";
+
 interface AttendanceRecord {
   [date: string]: {
-    [studentId: string]: string;
+    [studentId: string]: AttendanceStatus;
   };
 }
 
@@ -56,6 +62,20 @@ interface GraphData {
     Izin: number;
     Sakit: number;
   };
+}
+
+interface StatusSummary {
+  Hadir: number;
+  Izin: number;
+  Sakit: number;
+  Alpha: number;
+}
+
+interface StatusVisibility {
+  Hadir: boolean;
+  Alpha: boolean;
+  Izin: boolean;
+  Sakit: boolean;
 }
 
 const formatDateDDMMYYYY = (isoDate: string): string => {
@@ -304,7 +324,7 @@ const AttendanceTab: React.FC<{
 
   useEffect(() => {
     if (students.length && !attendance[date]) {
-      const init: { [key: string]: string } = {};
+      const init: { [key: string]: AttendanceStatus } = {};
       students.forEach((s) => (init[s.id] = "Hadir"));
       setAttendance((prev) => ({ ...prev, [date]: init }));
     }
@@ -354,11 +374,11 @@ const AttendanceTab: React.FC<{
     Alpha: "bg-red-500",
   };
 
-  const getAttendanceSummary = () => {
-    const summary = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
+  const getAttendanceSummary = (): StatusSummary => {
+    const summary: StatusSummary = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
     filteredStudents.forEach((s) => {
-      const status = attendance[date]?.[s.id] || "Hadir";
-      summary[status as AttendanceStatus]++;
+      const status = (attendance[date]?.[s.id] || "Hadir") as AttendanceStatus;
+      summary[status]++;
     });
     return summary;
   };
@@ -544,26 +564,21 @@ const AttendanceTab: React.FC<{
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      {(
-                        [
-                          "Hadir",
-                          "Izin",
-                          "Sakit",
-                          "Alpha",
-                        ] as AttendanceStatus[]
-                      ).map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => setStatus(s.id, status)}
-                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                            attendance[date]?.[s.id] === status
-                              ? `${statusColor[status]} text-white`
-                              : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
-                          }`}
-                        >
-                          {status}
-                        </button>
-                      ))}
+                      {(["Hadir", "Izin", "Sakit", "Alpha"] as const).map(
+                        (status) => (
+                          <button
+                            key={status}
+                            onClick={() => setStatus(s.id, status)}
+                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                              attendance[date]?.[s.id] === status
+                                ? `${statusColor[status]} text-white`
+                                : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"
+                            }`}
+                          >
+                            {status}
+                          </button>
+                        )
+                      )}
                     </div>
                   </div>
                 </div>
@@ -608,7 +623,7 @@ const MonthlyRecapTab: React.FC<{
     "Oktober",
     "November",
     "Desember",
-  ];
+  ] as const;
 
   useEffect(() => {
     setLoading(true);
@@ -659,7 +674,7 @@ const MonthlyRecapTab: React.FC<{
   }, [recapData, selectedKelas]);
 
   const getStatusSummary = () => {
-    const summary = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
+    const summary: StatusSummary = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
     filteredRecapData.forEach((item) => {
       summary.Hadir += item.hadir || 0;
       summary.Alpha += item.alpa || 0;
@@ -759,20 +774,17 @@ const MonthlyRecapTab: React.FC<{
     };
     headers.forEach((header, index) => {
       const cellAddress = XLSX.utils.encode_cell({ r: 0, c: index });
-      if (!ws[cellAddress]) ws[cellAddress] = {};
-      ws[cellAddress].s = headerStyle;
+      ws[cellAddress] = { ...ws[cellAddress], s: headerStyle };
     });
     const totalRow = filteredRecapData.length + 1;
     ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${totalRow}`;
-      if (!ws[cellAddress]) ws[cellAddress] = {};
-      ws[cellAddress].s = totalStyle;
+      ws[cellAddress] = { ...ws[cellAddress], s: totalStyle };
     });
     const percentRow = filteredRecapData.length + 2;
     ["A", "B", "C", "D", "E", "F", "G"].forEach((col, idx) => {
       const cellAddress = `${col}${percentRow}`;
-      if (!ws[cellAddress]) ws[cellAddress] = {};
-      ws[cellAddress].s = percentStyle;
+      ws[cellAddress] = { ...ws[cellAddress], s: percentStyle };
     });
 
     const wb = XLSX.utils.book_new();
@@ -804,131 +816,87 @@ const MonthlyRecapTab: React.FC<{
       "Sakit",
       "% Hadir",
     ];
-    const totalAttendance =
-      statusSummary.Hadir +
-      statusSummary.Alpha +
-      statusSummary.Izin +
-      statusSummary.Sakit;
-    const data = [
-      ...filteredRecapData.map((item) => [
-        item.nama || "T/A",
-        item.kelas || "T/A",
-        item.hadir || 0,
-        item.alpa || 0,
-        item.izin || 0,
-        item.sakit || 0,
-        item.persenHadir !== undefined ? `${item.persenHadir}%` : "T/A",
-      ]),
-      // Baris Total
-      [
-        "TOTAL",
-        "",
-        statusSummary.Hadir,
-        statusSummary.Alpha,
-        statusSummary.Izin,
-        statusSummary.Sakit,
-        "",
-      ],
-      // Baris Persentase
-      [
-        "PERSEN",
-        "",
-        totalAttendance > 0
-          ? `${((statusSummary.Hadir / totalAttendance) * 100).toFixed(1)}%`
-          : "0%",
-        totalAttendance > 0
-          ? `${((statusSummary.Alpha / totalAttendance) * 100).toFixed(1)}%`
-          : "0%",
-        totalAttendance > 0
-          ? `${((statusSummary.Izin / totalAttendance) * 100).toFixed(1)}%`
-          : "0%",
-        totalAttendance > 0
-          ? `${((statusSummary.Sakit / totalAttendance) * 100).toFixed(1)}%`
-          : "0%",
-        "",
-      ],
+    const body = filteredRecapData.map((item) => [
+      item.nama || "N/A",
+      item.kelas || "N/A",
+      item.hadir || 0,
+      item.alpa || 0,
+      item.izin || 0,
+      item.sakit || 0,
+      item.persenHadir !== undefined ? `${item.persenHadir}%` : "N/A",
+    ]);
+
+    const totalRow = [
+      "TOTAL",
+      "",
+      statusSummary.Hadir,
+      statusSummary.Alpha,
+      statusSummary.Izin,
+      statusSummary.Sakit,
+      "",
     ];
 
-    // Tambahkan judul
-    doc.text(
-      `REKAP ABSENSI SISWA KELAS ${selectedKelas} ${selectedBulan.toUpperCase()} 2025`,
-      doc.internal.pageSize.getWidth() / 2,
-      15,
-      { align: "center" }
-    );
-    doc.setFontSize(12);
+    const percentRow = [
+      "PERSEN",
+      "",
+      `${(
+        (statusSummary.Hadir /
+          (statusSummary.Hadir +
+            statusSummary.Alpha +
+            statusSummary.Izin +
+            statusSummary.Sakit)) *
+        100
+      ).toFixed(2)}%`,
+      `${(
+        (statusSummary.Alpha /
+          (statusSummary.Hadir +
+            statusSummary.Alpha +
+            statusSummary.Izin +
+            statusSummary.Sakit)) *
+        100
+      ).toFixed(2)}%`,
+      `${(
+        (statusSummary.Izin /
+          (statusSummary.Hadir +
+            statusSummary.Alpha +
+            statusSummary.Izin +
+            statusSummary.Sakit)) *
+        100
+      ).toFixed(2)}%`,
+      `${(
+        (statusSummary.Sakit /
+          (statusSummary.Hadir +
+            statusSummary.Alpha +
+            statusSummary.Izin +
+            statusSummary.Sakit)) *
+        100
+      ).toFixed(2)}%`,
+      "",
+    ];
 
-    // Buat tabel tunggal dengan semua data
+    doc.text(
+      `Rekap Absensi Bulan ${selectedBulan} Kelas ${selectedKelas}`,
+      14,
+      10
+    );
+
     autoTable(doc, {
       head: [headers],
-      body: data,
-      startY: 25,
-      theme: "grid",
-      headStyles: {
-        fillColor: [255, 255, 0], // Kuning untuk header
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        lineColor: [0, 0, 0], // Garis batas hitam untuk header
-        lineWidth: 0.1, // Ketebalan garis batas
-      },
-      styles: {
-        cellPadding: 2,
-        fontSize: 10,
-        halign: "center",
-        lineColor: [0, 0, 0], // Garis batas hitam untuk seluruh tabel
-        lineWidth: 0.1, // Ketebalan garis batas
-      },
+      body: [...body, totalRow, percentRow],
+      startY: 20,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [255, 255, 0], textColor: [0, 0, 0] },
+      alternateRowStyles: { fillColor: [240, 240, 240] },
       columnStyles: {
         0: { cellWidth: 50 },
         1: { cellWidth: 20 },
-        2: { cellWidth: 15 },
-        3: { cellWidth: 15 },
-        4: { cellWidth: 15 },
-        5: { cellWidth: 15 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 20 },
         6: { cellWidth: 20 },
       },
-      margin: { left: 30, right: 15 },
-      tableWidth: "auto",
-      horizontalPageBreak: true,
-      // Gaya untuk baris total dan persentase
-      didParseCell: (data) => {
-        if (data.row.index === filteredRecapData.length) {
-          // Baris Total
-          data.cell.styles.fillColor = [240, 240, 240]; // Abu-abu muda
-          data.cell.styles.fontStyle = "bold";
-        } else if (data.row.index === filteredRecapData.length + 1) {
-          // Baris Persentase
-          data.cell.styles.fillColor = [240, 240, 240]; // Abu-abu muda
-          data.cell.styles.fontStyle = "bold";
-        }
-      },
     });
-
-    // Tambahkan tanda tangan
-    const finalY = (doc as any).lastAutoTable.finalY || 25;
-    doc.text("Mengetahui,", 15, finalY + 20);
-    doc.text("Kepala Sekolah", 15, finalY + 30);
-    doc.text("NIP: 1975091220001014", 15, finalY + 40);
-    doc.text(
-      `Makassar, ${new Date().toLocaleDateString("id-ID", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })}`,
-      doc.internal.pageSize.getWidth() - 50,
-      finalY + 20
-    );
-    doc.text("Guru Kelas", doc.internal.pageSize.getWidth() - 50, finalY + 30);
-    doc.text(
-      "Herlita, S.Pd",
-      doc.internal.pageSize.getWidth() - 50,
-      finalY + 40
-    );
-    doc.text(
-      "NIP: 1990081020202212",
-      doc.internal.pageSize.getWidth() - 50,
-      finalY + 50
-    );
 
     const date = new Date()
       .toLocaleString("id-ID", {
@@ -949,29 +917,18 @@ const MonthlyRecapTab: React.FC<{
     <div className="max-w-4xl mx-auto">
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
-          📊 Rekap Bulanan
+          📊 Rekap Absensi Bulanan
         </h2>
 
-        <div className="mb-6 text-center flex flex-col md:flex-row gap-4 items-center justify-center">
-          <div>
-            <p className="text-sm text-gray-500 mb-2">Filter Bulan</p>
-            <select
-              value={selectedBulan}
-              onChange={(e) => setSelectedBulan(e.target.value)}
-              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
-            >
-              {months.map((bulan) => (
-                <option key={bulan} value={bulan}>
-                  {bulan}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
+          <div className="text-center">
             <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
             <select
               value={selectedKelas}
-              onChange={(e) => setSelectedKelas(e.target.value)}
+              onChange={(e) => {
+                console.log("Mengubah filter kelas ke:", e.target.value);
+                setSelectedKelas(e.target.value);
+              }}
               className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
             >
               {uniqueClasses.map((kelas) => (
@@ -981,74 +938,116 @@ const MonthlyRecapTab: React.FC<{
               ))}
             </select>
           </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Pilih Bulan</p>
+            <select
+              value={selectedBulan}
+              onChange={(e) => setSelectedBulan(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
+            >
+              {months.map((month) => (
+                <option key={month} value={month}>
+                  {month}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+            <div className="text-green-600 font-bold text-lg">
+              {statusSummary.Hadir}
+            </div>
+            <div className="text-green-700 text-sm">Hadir</div>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+            <div className="text-yellow-600 font-bold text-lg">
+              {statusSummary.Izin}
+            </div>
+            <div className="text-yellow-700 text-sm">Izin</div>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+            <div className="text-blue-600 font-bold text-lg">
+              {statusSummary.Sakit}
+            </div>
+            <div className="text-blue-700 text-sm">Sakit</div>
+          </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+            <div className="text-red-600 font-bold text-lg">
+              {statusSummary.Alpha}
+            </div>
+            <div className="text-red-700 text-sm">Alpha</div>
+          </div>
         </div>
 
         {loading ? (
           <div className="text-center py-8">
-            <p className="text-gray-500">Memuat data...</p>
+            <p className="text-gray-500">Memuat rekap...</p>
           </div>
         ) : filteredRecapData.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">
-              Tidak ada data rekap untuk ditampilkan untuk bulan "
-              {selectedBulan}" dan kelas "{selectedKelas}".
+              Tidak ada data rekap untuk {selectedBulan} kelas {selectedKelas}.
             </p>
             <p className="text-sm text-gray-400 mt-2">
-              Periksa apakah data tersedia di sheet "{selectedBulan}".
+              Coba pilih kelas atau bulan lain.
             </p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                <div className="text-green-600 font-bold text-lg">
-                  {statusSummary.Hadir}
-                </div>
-                <div className="text-green-700 text-sm">Hadir</div>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                <div className="text-yellow-600 font-bold text-lg">
-                  {statusSummary.Izin}
-                </div>
-                <div className="text-yellow-700 text-sm">Izin</div>
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-                <div className="text-blue-600 font-bold text-lg">
-                  {statusSummary.Sakit}
-                </div>
-                <div className="text-blue-700 text-sm">Sakit</div>
-              </div>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <div className="text-red-600 font-bold text-lg">
-                  {statusSummary.Alpha}
-                </div>
-                <div className="text-red-700 text-sm">Alpha</div>
-              </div>
-            </div>
-
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="min-w-full border-collapse border border-gray-200">
                 <thead>
-                  <tr className="bg-gray-200">
-                    <th className="p-3 border">Nama</th>
-                    <th className="p-3 border">Kelas</th>
-                    <th className="p-3 border">Hadir</th>
-                    <th className="p-3 border">Alpha</th>
-                    <th className="p-3 border">Izin</th>
-                    <th className="p-3 border">Sakit</th>
-                    <th className="p-3 border">% Hadir</th>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                      Nama
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                      Kelas
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-700">
+                      Hadir
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-700">
+                      Alpha
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-700">
+                      Izin
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-700">
+                      Sakit
+                    </th>
+                    <th className="border border-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-700">
+                      % Hadir
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRecapData.map((item, index) => (
-                    <tr key={index} className="border-t">
-                      <td className="p-3">{item.nama || "N/A"}</td>
-                      <td className="p-3">{item.kelas || "N/A"}</td>
-                      <td className="p-3">{item.hadir || 0}</td>
-                      <td className="p-3">{item.alpa || 0}</td>
-                      <td className="p-3">{item.izin || 0}</td>
-                      <td className="p-3">{item.sakit || 0}</td>
-                      <td className="p-3">
+                    <tr
+                      key={index}
+                      className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                    >
+                      <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">
+                        {item.nama || "N/A"}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">
+                        {item.kelas || "N/A"}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-center text-sm text-gray-600">
+                        {item.hadir || 0}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-center text-sm text-gray-600">
+                        {item.alpa || 0}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-center text-sm text-gray-600">
+                        {item.izin || 0}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-center text-sm text-gray-600">
+                        {item.sakit || 0}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-center text-sm text-gray-600">
                         {item.persenHadir !== undefined
                           ? `${item.persenHadir}%`
                           : "N/A"}
@@ -1059,18 +1058,18 @@ const MonthlyRecapTab: React.FC<{
               </table>
             </div>
 
-            <div className="text-center mt-6">
+            <div className="mt-6 flex gap-4 justify-center">
               <button
                 onClick={downloadExcel}
-                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium mr-2"
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
               >
-                📥 Unduh Rekap sebagai Excel
+                📥 Download Excel
               </button>
               <button
                 onClick={downloadPDF}
-                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
               >
-                📥 Unduh Rekap sebagai PDF
+                📄 Download PDF
               </button>
             </div>
           </>
@@ -1098,6 +1097,13 @@ const GraphTab: React.FC<{
     Desember: { Hadir: 0, Alpha: 0, Izin: 0, Sakit: 0 },
   });
   const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
+  const [selectedSemester, setSelectedSemester] = useState<"1" | "2">("2");
+  const [statusVisibility, setStatusVisibility] = useState<StatusVisibility>({
+    Hadir: true,
+    Alpha: true,
+    Izin: true,
+    Sakit: true,
+  });
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -1105,7 +1111,7 @@ const GraphTab: React.FC<{
     fetch(
       `${endpoint}?action=graphData&kelas=${
         selectedKelas === "Semua" ? "" : selectedKelas
-      }`
+      }&semester=${selectedSemester}`
     )
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -1138,124 +1144,134 @@ const GraphTab: React.FC<{
         alert("❌ Gagal memuat data grafik. Cek console untuk detail.");
         setLoading(false);
       });
-  }, [selectedKelas]);
+  }, [selectedKelas, selectedSemester]);
 
-  const chartData = {
-    labels: [
-      "Januari",
-      "Februari",
-      "Maret",
-      "April",
-      "Mei",
-      "Juni",
-      "Juli",
-      "Agustus",
-      "September",
-      "Oktober",
-      "November",
-      "Desember",
-    ],
+  const semesterMonths: Record<"1" | "2", string[]> = {
+    "1": ["Juli", "Agustus", "September", "Oktober", "November", "Desember"],
+    "2": ["Januari", "Februari", "Maret", "April", "Mei", "Juni"],
+  };
+
+  const chartData: ChartData<"bar", number[], string> = {
+    labels: semesterMonths[selectedSemester],
     datasets: [
-      {
-        label: "Hadir",
-        data: [
-          graphData.Januari.Hadir,
-          graphData.Februari.Hadir,
-          graphData.Maret.Hadir,
-          graphData.April.Hadir,
-          graphData.Mei.Hadir,
-          graphData.Juni.Hadir,
-          graphData.Juli.Hadir,
-          graphData.Agustus.Hadir,
-          graphData.September.Hadir,
-          graphData.Oktober.Hadir,
-          graphData.November.Hadir,
-          graphData.Desember.Hadir,
-        ],
-        backgroundColor: "rgba(75, 192, 192, 0.6)",
-        borderColor: "rgba(75, 192, 192, 1)",
-        borderWidth: 1,
-      },
-      {
-        label: "Alpha",
-        data: [
-          graphData.Januari.Alpha,
-          graphData.Februari.Alpha,
-          graphData.Maret.Alpha,
-          graphData.April.Alpha,
-          graphData.Mei.Alpha,
-          graphData.Juni.Alpha,
-          graphData.Juli.Alpha,
-          graphData.Agustus.Alpha,
-          graphData.September.Alpha,
-          graphData.Oktober.Alpha,
-          graphData.November.Alpha,
-          graphData.Desember.Alpha,
-        ],
-        backgroundColor: "rgba(255, 99, 132, 0.6)",
-        borderColor: "rgba(255, 99, 132, 1)",
-        borderWidth: 1,
-      },
-      {
-        label: "Izin",
-        data: [
-          graphData.Januari.Izin,
-          graphData.Februari.Izin,
-          graphData.Maret.Izin,
-          graphData.April.Izin,
-          graphData.Mei.Izin,
-          graphData.Juni.Izin,
-          graphData.Juli.Izin,
-          graphData.Agustus.Izin,
-          graphData.September.Izin,
-          graphData.Oktober.Izin,
-          graphData.November.Izin,
-          graphData.Desember.Izin,
-        ],
-        backgroundColor: "rgba(255, 205, 86, 0.6)",
-        borderColor: "rgba(255, 205, 86, 1)",
-        borderWidth: 1,
-      },
-      {
-        label: "Sakit",
-        data: [
-          graphData.Januari.Sakit,
-          graphData.Februari.Sakit,
-          graphData.Maret.Sakit,
-          graphData.April.Sakit,
-          graphData.Mei.Sakit,
-          graphData.Juni.Sakit,
-          graphData.Juli.Sakit,
-          graphData.Agustus.Sakit,
-          graphData.September.Sakit,
-          graphData.Oktober.Sakit,
-          graphData.November.Sakit,
-          graphData.Desember.Sakit,
-        ],
-        backgroundColor: "rgba(54, 162, 235, 0.6)",
-        borderColor: "rgba(54, 162, 235, 1)",
-        borderWidth: 1,
-      },
+      ...(statusVisibility.Hadir
+        ? [
+            {
+              label: "Hadir",
+              data: semesterMonths[selectedSemester].map(
+                (month: string) => graphData[month]?.Hadir || 0
+              ),
+              backgroundColor: "rgba(75, 192, 192, 0.6)",
+              borderColor: "rgba(75, 192, 192, 1)",
+              borderWidth: 1,
+            },
+          ]
+        : []),
+      ...(statusVisibility.Alpha
+        ? [
+            {
+              label: "Alpha",
+              data: semesterMonths[selectedSemester].map(
+                (month: string) => graphData[month]?.Alpha || 0
+              ),
+              backgroundColor: "rgba(255, 99, 132, 0.6)",
+              borderColor: "rgba(255, 99, 132, 1)",
+              borderWidth: 1,
+            },
+          ]
+        : []),
+      ...(statusVisibility.Izin
+        ? [
+            {
+              label: "Izin",
+              data: semesterMonths[selectedSemester].map(
+                (month: string) => graphData[month]?.Izin || 0
+              ),
+              backgroundColor: "rgba(255, 205, 86, 0.6)",
+              borderColor: "rgba(255, 205, 86, 1)",
+              borderWidth: 1,
+            },
+          ]
+        : []),
+      ...(statusVisibility.Sakit
+        ? [
+            {
+              label: "Sakit",
+              data: semesterMonths[selectedSemester].map(
+                (month: string) => graphData[month]?.Sakit || 0
+              ),
+              backgroundColor: "rgba(54, 162, 235, 0.6)",
+              borderColor: "rgba(54, 162, 235, 1)",
+              borderWidth: 1,
+            },
+          ]
+        : []),
     ],
   };
 
-  const chartOptions = {
+  const chartOptions: ChartOptions<"bar"> = {
     responsive: true,
+    maintainAspectRatio: false, // Allow chart to adjust height independently of width
     plugins: {
-      legend: { position: "top" as const }, // Gunakan 'as const' untuk tipe literal
+      legend: {
+        position: "top" as const,
+        onClick: (
+          e: ChartEvent,
+          legendItem: LegendItem,
+          legend: {
+            chart: {
+              data: { datasets: { hidden?: boolean }[] };
+              update: () => void;
+            };
+          }
+        ) => {
+          const index = legendItem.datasetIndex;
+          if (index !== undefined) {
+            const ci = legend.chart.data.datasets[index];
+            ci.hidden = !ci.hidden;
+            legend.chart.update();
+            setStatusVisibility((prev) => ({
+              ...prev,
+              [legendItem.text as keyof StatusVisibility]: !ci.hidden,
+            }));
+          }
+        },
+      },
       title: {
         display: true,
-        text: `Persentase Kehadiran Kelas ${selectedKelas} 2025`,
+        text: `Persentase Kehadiran Kelas ${selectedKelas} Semester ${selectedSemester} 2025`,
       },
     },
     scales: {
       y: {
         beginAtZero: true,
         max: 100,
+        ticks: {
+          stepSize: 10, // Maintain 10-unit increments
+          font: {
+            size: 10, // Reduce font size for better fit on small screens
+          },
+          autoSkip: false, // Ensure all ticks are shown
+          maxTicksLimit: 11, // Limit to 11 ticks (0, 10, 20, ..., 100)
+        },
         title: { display: true, text: "Persentase (%)" },
       },
+      x: {
+        ticks: {
+          font: {
+            size: 10, // Reduce font size for x-axis labels on small screens
+          },
+        },
+      },
     },
-  } as const; // Opsional, tambahkan ini untuk seluruh objek jika diperlukan
+  };
+
+  const handleStatusToggle = (status: keyof StatusVisibility) => {
+    setStatusVisibility((prev) => ({
+      ...prev,
+      [status]: !prev[status],
+    }));
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -1264,19 +1280,46 @@ const GraphTab: React.FC<{
           📈 Grafik Kehadiran
         </h2>
 
-        <div className="mb-6 text-center">
-          <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
-          <select
-            value={selectedKelas}
-            onChange={(e) => setSelectedKelas(e.target.value)}
-            className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
-          >
-            {uniqueClasses.map((kelas) => (
-              <option key={kelas} value={kelas}>
-                {kelas}
-              </option>
-            ))}
-          </select>
+        <div className="mb-6 flex flex-col md:flex-row gap-4 items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Filter Kelas</p>
+            <select
+              value={selectedKelas}
+              onChange={(e) => setSelectedKelas(e.target.value)}
+              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
+            >
+              {uniqueClasses.map((kelas) => (
+                <option key={kelas} value={kelas}>
+                  {kelas}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-2">Filter Semester</p>
+            <select
+              value={selectedSemester}
+              onChange={(e) => setSelectedSemester(e.target.value as "1" | "2")}
+              className="border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white min-w-32"
+            >
+              <option value="1">Semester 1 (Juli-Des)</option>
+              <option value="2">Semester 2 (Jan-Jun)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-6 flex flex-wrap gap-4 justify-center">
+          {(["Hadir", "Alpha", "Izin", "Sakit"] as const).map((status) => (
+            <label key={status} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={statusVisibility[status]}
+                onChange={() => handleStatusToggle(status)}
+                className="h-4 w-4 text-blue-600 rounded"
+              />
+              <span className="text-sm text-gray-700">{status}</span>
+            </label>
+          ))}
         </div>
 
         {loading ? (
@@ -1284,7 +1327,13 @@ const GraphTab: React.FC<{
             <p className="text-gray-500">Memuat grafik...</p>
           </div>
         ) : (
-          <div className="h-96">
+          <div
+            className="h-96"
+            style={{
+              minHeight: "300px", // Minimum height for small screens
+              maxHeight: "500px", // Prevent excessive height on larger screens
+            }}
+          >
             <Bar data={chartData} options={chartOptions} />
           </div>
         )}
