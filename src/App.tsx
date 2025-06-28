@@ -32,9 +32,9 @@ const endpoint =
 
 interface Student {
   id: string;
-  name: string;
-  nisn: string;
-  kelas: string;
+  name: string | null | undefined;
+  nisn: string | null | undefined;
+  kelas: string | null | undefined;
 }
 
 type AttendanceStatus = "Hadir" | "Izin" | "Sakit" | "Alpha";
@@ -86,10 +86,13 @@ const formatDateDDMMYYYY = (isoDate: string): string => {
 const StudentDataTab: React.FC<{
   students: Student[];
   onRefresh: () => void;
-}> = ({ students, onRefresh }) => {
+  uniqueClasses: string[];
+}> = ({ students, onRefresh, uniqueClasses }) => {
   const [nisn, setNisn] = useState("");
   const [nama, setNama] = useState("");
   const [kelas, setKelas] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedKelas, setSelectedKelas] = useState<string>("Semua");
 
   const handleSubmit = () => {
     if (!nisn || !nama || !kelas) {
@@ -119,9 +122,9 @@ const StudentDataTab: React.FC<{
   };
 
   const handleEditStudent = (student: Student) => {
-    const newNisn = prompt("Edit NISN:", student.nisn);
-    const newName = prompt("Edit nama siswa:", student.name);
-    const newClass = prompt("Edit kelas siswa:", student.kelas);
+    const newNisn = prompt("Edit NISN:", student.nisn ?? undefined);
+    const newName = prompt("Edit nama siswa:", student.name ?? undefined);
+    const newClass = prompt("Edit kelas siswa:", student.kelas ?? undefined);
 
     if (newNisn && newName && newClass) {
       fetch(endpoint, {
@@ -144,7 +147,11 @@ const StudentDataTab: React.FC<{
     }
   };
 
-  const handleDeleteStudent = (nisn: string) => {
+  const handleDeleteStudent = (nisn: string | null | undefined) => {
+    if (!nisn) {
+      alert("❌ NISN tidak valid untuk penghapusan.");
+      return;
+    }
     if (confirm("Yakin ingin menghapus siswa ini?")) {
       fetch(endpoint, {
         method: "POST",
@@ -162,6 +169,21 @@ const StudentDataTab: React.FC<{
         .catch(() => alert("❌ Gagal menghapus siswa"));
     }
   };
+
+  const filteredStudents = React.useMemo(() => {
+    if (!searchQuery.trim() && selectedKelas === "Semua") return students;
+    const query = searchQuery.toLowerCase().trim();
+    return students.filter((student) => {
+      const matchesSearchQuery =
+        !searchQuery.trim() ||
+        (student.name && String(student.name).toLowerCase().includes(query)) ||
+        (student.nisn && String(student.nisn).toLowerCase().includes(query));
+      const matchesKelas =
+        selectedKelas === "Semua" ||
+        (student.kelas && String(student.kelas).trim() === selectedKelas);
+      return matchesSearchQuery && matchesKelas;
+    });
+  }, [students, searchQuery, selectedKelas]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -202,25 +224,55 @@ const StudentDataTab: React.FC<{
         </div>
       </div>
 
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 className="text-lg font-semibold text-gray-700 mb-4">
+          Pencarian Siswa
+        </h3>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Cari berdasarkan nama atau NISN..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full border border-gray-300 px-4 py-2 rounded-lg"
+          />
+        </div>
+        <div className="mb-4">
+          <select
+            value={selectedKelas}
+            onChange={(e) => setSelectedKelas(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-4 py-2 shadow-sm bg-white"
+          >
+            {uniqueClasses.map((kelas) => (
+              <option key={kelas} value={kelas}>
+                {kelas}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Daftar Siswa ({students.length})
+          Daftar Siswa ({filteredStudents.length})
         </h3>
-        {students.length === 0 ? (
+        {filteredStudents.length === 0 ? (
           <p className="text-center text-gray-500 py-8">
-            Belum ada data siswa.
+            {searchQuery || selectedKelas !== "Semua"
+              ? "Tidak ada siswa yang cocok dengan pencarian atau filter kelas."
+              : "Belum ada data siswa."}
           </p>
         ) : (
           <div className="space-y-3">
-            {students.map((s) => (
+            {filteredStudents.map((s) => (
               <div
                 key={s.id}
                 className="flex justify-between items-center bg-gray-50 border border-gray-200 px-4 py-3 rounded-lg"
               >
                 <div>
-                  <p className="font-medium text-gray-800">{s.name}</p>
+                  <p className="font-medium text-gray-800">{s.name || "N/A"}</p>
                   <p className="text-sm text-gray-600">
-                    NISN: {s.nisn} | Kelas: {s.kelas}
+                    NISN: {s.nisn || "N/A"} | Kelas: {s.kelas || "N/A"}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -344,9 +396,9 @@ const AttendanceTab: React.FC<{
 
     const data = studentsToSave.map((s) => ({
       tanggal: formattedDate,
-      nama: s.name,
-      kelas: s.kelas,
-      nisn: s.nisn,
+      nama: s.name || "N/A",
+      kelas: s.kelas || "N/A",
+      nisn: s.nisn || "N/A",
       status: attendance[date]?.[s.id] || "Hadir",
     }));
 
@@ -464,7 +516,8 @@ const AttendanceTab: React.FC<{
                       <strong>Kelas {kelas}:</strong> {siswaKelas.length} siswa
                       {siswaKelas.slice(0, 3).map((s) => (
                         <div key={s.id} className="ml-4 text-gray-600">
-                          • {s.name} (NISN: {s.nisn}, Kelas: {s.kelas})
+                          • {s.name || "N/A"} (NISN: {s.nisn || "N/A"}, Kelas:{" "}
+                          {s.kelas || "N/A"})
                         </div>
                       ))}
                       {siswaKelas.length > 3 && (
@@ -484,8 +537,9 @@ const AttendanceTab: React.FC<{
               <div className="max-h-24 overflow-y-auto text-xs bg-white p-2 rounded border">
                 {students.slice(0, 5).map((s, idx) => (
                   <div key={idx} className="text-gray-600">
-                    {idx + 1}. {s.name} | Kelas: "{s.kelas}" (type:{" "}
-                    {typeof s.kelas})
+                    {idx + 1}. {s.name || "N/A"} | Kelas: "{s.kelas || "N/A"}"
+                    (type: {typeof s.kelas}) | NISN: "{s.nisn || "N/A"}" (type:{" "}
+                    {typeof s.nisn})
                   </div>
                 ))}
               </div>
@@ -557,10 +611,10 @@ const AttendanceTab: React.FC<{
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-lg font-semibold text-gray-800">
-                        {s.name}
+                        {s.name || "N/A"}
                       </p>
                       <p className="text-sm text-gray-500">
-                        Kelas {s.kelas} • NISN: {s.nisn}
+                        Kelas {s.kelas || "N/A"} • NISN: {s.nisn || "N/A"}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -717,7 +771,7 @@ const MonthlyRecapTab: React.FC<{
         "",
       ],
       [
-        "PERSEN",
+        "P jackpot slot88 ERSEN",
         "",
         `${(
           (statusSummary.Hadir /
@@ -1211,7 +1265,7 @@ const GraphTab: React.FC<{
 
   const chartOptions: ChartOptions<"bar"> = {
     responsive: true,
-    maintainAspectRatio: false, // Allow chart to adjust height independently of width
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: "top" as const,
@@ -1247,19 +1301,19 @@ const GraphTab: React.FC<{
         beginAtZero: true,
         max: 100,
         ticks: {
-          stepSize: 10, // Maintain 10-unit increments
+          stepSize: 10,
           font: {
-            size: 10, // Reduce font size for better fit on small screens
+            size: 10,
           },
-          autoSkip: false, // Ensure all ticks are shown
-          maxTicksLimit: 11, // Limit to 11 ticks (0, 10, 20, ..., 100)
+          autoSkip: false,
+          maxTicksLimit: 11,
         },
         title: { display: true, text: "Persentase (%)" },
       },
       x: {
         ticks: {
           font: {
-            size: 10, // Reduce font size for x-axis labels on small screens
+            size: 10,
           },
         },
       },
@@ -1330,8 +1384,8 @@ const GraphTab: React.FC<{
           <div
             className="h-96"
             style={{
-              minHeight: "300px", // Minimum height for small screens
-              maxHeight: "500px", // Prevent excessive height on larger screens
+              minHeight: "300px",
+              maxHeight: "500px",
             }}
           >
             <Bar data={chartData} options={chartOptions} />
@@ -1451,7 +1505,11 @@ const StudentAttendanceApp: React.FC = () => {
 
         <div className="py-4">
           {activeTab === "data" ? (
-            <StudentDataTab students={students} onRefresh={fetchStudents} />
+            <StudentDataTab
+              students={students}
+              onRefresh={fetchStudents}
+              uniqueClasses={uniqueClasses}
+            />
           ) : activeTab === "attendance" ? (
             <AttendanceTab
               students={students}
